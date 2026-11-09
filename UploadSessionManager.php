@@ -7,6 +7,7 @@ namespace TorrentGate;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
+use TorrentGate\SubmissionService;
 
 final class UploadSessionManager
 {
