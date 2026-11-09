@@ -30,7 +30,9 @@
         destinationRoot: document.getElementById('destination-root'),
         destinationPreview: document.getElementById('destination-preview'),
         destinationSave: document.getElementById('destination-save'),
-        destinationStatus: document.getElementById('destination-status')
+        destinationStatus: document.getElementById('destination-status'),
+	submitSelected: document.getElementById('submit-selected-button'),
+        submissionResults: document.getElementById('submission-results')
     };
 
     let csrfToken = null;
@@ -86,7 +88,8 @@
             elements.browse,
             elements.selectAll,
             elements.deselectAll,
-            elements.clear
+            elements.clear,
+            elements.submitSelected
         ]) {
             button.disabled = value;
         }
@@ -390,6 +393,8 @@
         elements.selectAll.disabled = busy || !selectable;
         elements.deselectAll.disabled = busy || !selectable;
         elements.clear.disabled = busy || uploads.length === 0;
+	elements.submitSelected.disabled =
+            busy || !summary || summary.selected_count === 0;
     }
 
     async function changeSelection(id, selected) {
@@ -578,6 +583,127 @@
         }
     }
 
+    function renderSubmissionResults(results) {
+        elements.submissionResults.replaceChildren();
+    
+        const hasProblem = results.some(result =>
+            result.status === 'failed' ||
+            result.status === 'uncertain'
+        );
+    
+        elements.submissionResults.className = hasProblem
+            ? 'notice notice-error'
+            : 'notice notice-info';
+    
+        elements.submissionResults.hidden = false;
+    
+        elements.submissionResults.append(
+            element('strong', '', 'Submission results')
+        );
+    
+        const list = element('ul');
+    
+        for (const result of results) {
+            const item = element('li');
+    
+            let statusText;
+    
+            switch (result.status) {
+                case 'added':
+                    statusText = 'Added to Transmission';
+                    break;
+                case 'duplicate':
+                    statusText = 'Already present in Transmission';
+                    break;
+                case 'uncertain':
+                    statusText = 'Outcome uncertain — not retried automatically';
+                    break;
+                case 'failed':
+                    statusText = 'Submission failed';
+                    break;
+                default:
+                    statusText = 'Unknown result';
+            }
+    
+            item.append(
+                element('strong', '', result.filename || 'Unknown torrent'),
+                document.createTextNode(` — ${statusText}`)
+            );
+    
+            if (result.error) {
+                item.append(
+                    element('div', '', result.error)
+                );
+            }
+    
+            if (result.transmission) {
+                item.append(
+                    element(
+                        'div',
+                        '',
+                        `Transmission ID: ${result.transmission.id}`
+                    )
+                );
+            }
+    
+            list.append(item);
+        }
+    
+        elements.submissionResults.append(list);
+    }
+    
+    async function submitSelected() {
+        if (busy || !summary || summary.selected_count === 0) {
+            return;
+        }
+    
+        setBusy(true);
+        clearError();
+        elements.submissionResults.hidden = true;
+    
+        try {
+            // Obtain authoritative selection and destination details.
+            const previewBody = await request('preview');
+            const preview = previewBody.preview;
+    
+            if (!preview || preview.count === 0) {
+                throw new Error('There are no eligible torrents to submit.');
+            }
+    
+            const message = [
+                `Submit ${preview.count} torrent(s) to Transmission?`,
+                '',
+                `Total download size: ${formatBytes(preview.total_size)}`,
+                `Destination: ${preview.destination.absolute_path}`,
+                '',
+                'Do you want to continue?'
+            ].join('\n');
+    
+            if (!window.confirm(message)) {
+                return;
+            }
+    
+            const result = await request('submit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-TorrentGate-CSRF': csrfToken
+                },
+                body: '{}'
+            });
+    
+            renderSubmissionResults(result.results || []);
+    
+            await refreshState();
+    
+        } catch (error) {
+            showError(error.message);
+        } finally {
+            setBusy(false);
+            render();
+        }
+    }
+
     elements.browse.addEventListener('click', () => {
         elements.fileInput.click();
     });
@@ -628,6 +754,11 @@
     );
     elements.destinationForm.addEventListener('submit', saveDestination);
 
+    elements.submitSelected.addEventListener(
+        'click',
+        submitSelected
+    );
+    elements.clear.addEventListener('click', clearQueue);
     refreshState().catch(error => {
         elements.connection.textContent = 'Connection error';
         elements.connection.classList.add('error');
