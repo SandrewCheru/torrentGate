@@ -15,8 +15,56 @@ final class UploadController
     private const DESTINATION_KEY = 'torrentgate_destination';
 
     public function __construct(
-        private readonly UploadSessionManager $manager
+        private readonly UploadSessionManager $manager,
+        private readonly ?SubmissionService $submissionService = null
     ) {
+    }
+
+
+    private function submitResponse(array &$session): array
+    {
+        if ($this->submissionService === null) {
+            return $this->response(503, [
+                'ok' => false,
+                'error' => 'Submission service is unavailable.',
+            ]);
+        }
+    
+        $state = &$session[self::SESSION_STATE_KEY];
+    
+        if (!is_array($state ?? null)) {
+            $state = [];
+        }
+    
+        $relativePath = $session[self::DESTINATION_KEY] ?? '';
+    
+        if (!is_string($relativePath)) {
+            return $this->response(500, [
+                'ok' => false,
+                'error' => 'The saved destination setting is invalid.',
+            ]);
+        }
+    
+        try {
+            $submission = $this->submissionService->submit(
+                $state,
+                $session[self::CSRF_KEY],
+                $relativePath
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return $this->response(400, [
+                'ok' => false,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+    
+        return $this->response(200, [
+            'ok' => true,
+            'selected_count' => $submission['selected_count'],
+            'results' => $submission['results'],
+            'uploads' => $this->manager->getUploads($state),
+            'summary' => $this->manager->getSummary($state),
+        ]);
     }
 
     /**
@@ -78,6 +126,7 @@ final class UploadController
                 'select' => $this->selectResponse($session, $post),
                 'clear' => $this->clearResponse($session),
                 'destination' => $this->destinationResponse($session, $post),
+		'submit' => $this->submitResponse($session),
                 default => $this->response(404, [
                     'ok' => false,
                     'error' => 'Unknown API action.',
