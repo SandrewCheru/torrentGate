@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use TorrentGate\Http\UploadController;
 use TorrentGate\UploadSessionManager;
+use TorrentGate\SubmissionAttemptStore;
+use TorrentGate\SubmissionService;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -168,7 +170,23 @@ try {
         '/var/lib/torrentgate/temporary'
     );
 
-    $controller = new UploadController($manager);
+    $submissionService = null;
+    
+    if ($action === 'submit') {
+        $attemptStore = new SubmissionAttemptStore(
+            '/var/lib/torrentgate/temporary'
+        );
+    
+        $submissionService = new SubmissionService(
+            $manager,
+            $attemptStore
+        );
+    }
+    
+    $controller = new UploadController(
+        $manager,
+        $submissionService
+    );
 
     $result = $controller->handle(
         $method,
