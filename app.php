@@ -167,7 +167,28 @@
                     <strong id="summary-unique-size">0 B</strong>
                 </div>
             </div>
-
+            <div class="submission-controls" style="margin-top: 20px;">
+                <button
+                    type="button"
+                    class="button button-primary"
+                    id="submit-selected-button"
+                    disabled
+                >
+                    Submit selected torrents
+                </button>
+                <p class="help-text">
+                    You will be asked to confirm the number, total size and destination
+                    before anything is sent to Transmission.
+                </p>
+            </div>
+            
+            <div
+                class="notice notice-info"
+                id="submission-results"
+                role="status"
+                aria-live="polite"
+                hidden
+            ></div>
 
         </section>
     </main>
